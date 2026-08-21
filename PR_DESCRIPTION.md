@@ -11,7 +11,7 @@ This pull request introduces the complete implementation of the **Bookmark Manag
 - **Prisma Schema (`prisma/schema.prisma`)**:
   - `Folder`: Primary key UUID, name, createdAt timestamp, one-to-many relation with `Bookmark`.
   - `Bookmark`: Primary key UUID, title, URL, string array tags, foreign key `folderId`, createdAt timestamp.
-  - **Cascading Deletions**: Configured `onDelete: Cascade` on the `folderId` relation so deleting a folder cleanly deletes its bookmarks.
+  - **Restrict Deletion**: Configured `onDelete: Restrict` on the `folderId` relation so deleting a folder that still contains bookmarks is rejected by the database, preventing accidental bulk data loss.
   - **Database Indices**: Added index on `folderId` and a composite index on `(createdAt, id)` for efficient cursor pagination lookups.
   - Generated standard migrations in `prisma/migrations/`.
 
