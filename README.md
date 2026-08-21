@@ -70,8 +70,8 @@ Configuration is loaded via `.env` (a template is provided in `.env.example`):
 - **`Bookmark`**: Stores bookmark records (`id`, `title`, `url`, `tags`, `folderId`, `createdAt`).
 
 ### Relations & Indices
-- **Foreign Key**: `Bookmark.folderId -> Folder.id` with `onDelete: Cascade`.
-  - *Rationale*: Deleting a folder cleanly removes its associated bookmarks without leaving orphaned records in the database.
+- **Foreign Key**: `Bookmark.folderId -> Folder.id` with `onDelete: Restrict`.
+  - *Rationale*: Defensive data protection — deleting a folder that contains bookmarks is rejected by the database, preventing accidental bulk data loss from typos and requiring clients to explicitly reassign or delete bookmarks first.
 - **Indices**:
   - `@@index([folderId])` for fast folder-scoped lookups.
   - `@@index([createdAt, id])` composite index for optimal cursor-based pagination traversal.

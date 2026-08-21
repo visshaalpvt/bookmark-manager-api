@@ -176,8 +176,8 @@ describe('API Integration Tests (PostgreSQL)', () => {
     expect(page2.edges.length).toBe(2);
     expect(page2.pageInfo.hasNextPage).toBe(true);
     // Ensure records on Page 2 are distinct from Page 1
-    const page1Ids = page1.edges.map((e: any) => e.node.id);
-    const page2Ids = page2.edges.map((e: any) => e.node.id);
+    const page1Ids = page1.edges.map((e: { node: { id: string } }) => e.node.id);
+    const page2Ids = page2.edges.map((e: { node: { id: string } }) => e.node.id);
     for (const id of page2Ids) {
       expect(page1Ids).not.toContain(id);
     }

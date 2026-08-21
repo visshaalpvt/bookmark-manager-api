@@ -26,4 +26,4 @@ CREATE INDEX "bookmarks_folderId_idx" ON "bookmarks"("folderId");
 CREATE INDEX "bookmarks_createdAt_id_idx" ON "bookmarks"("createdAt", "id");
 
 -- AddForeignKey
-ALTER TABLE "bookmarks" ADD CONSTRAINT "bookmarks_folderId_fkey" FOREIGN KEY ("folderId") REFERENCES "folders"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "bookmarks" ADD CONSTRAINT "bookmarks_folderId_fkey" FOREIGN KEY ("folderId") REFERENCES "folders"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

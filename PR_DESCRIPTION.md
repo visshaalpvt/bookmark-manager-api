@@ -57,9 +57,9 @@ This pull request introduces the complete implementation of the **Bookmark Manag
    - *Decision*: Composite cursor.
    - *Rationale*: Sorting by `createdAt` allows intuitive chronological ordering (newest bookmarks first). However, multiple records can share identical millisecond timestamps. Adding `id` as a deterministic tiebreaker prevents skipping records or infinite loops at page boundaries.
 
-2. **Cascade Deletion (`onDelete: Cascade`) vs Restrict (`onDelete: Restrict`)**:
-   - *Decision*: Cascade.
-   - *Rationale*: For a bookmark manager, a folder is an organizational container. Deleting a folder should cleanly remove its bookmarks without leaving orphaned records or requiring manual client-side batch deletions.
+2. **Restrict Deletion (`onDelete: Restrict`) vs Cascade (`onDelete: Cascade`)**:
+   - *Decision*: `onDelete: Restrict`.
+   - *Rationale*: For a bookmark manager, bookmarks are valuable user assets. Using `Restrict` provides defensive data-loss protection against inadvertent folder deletions/typos, requiring API clients to explicitly reassign (`moveBookmark`) or delete bookmarks before deleting a folder container.
 
 3. **Schema-First vs Code-First**:
    - *Decision*: Schema-First (`schema.graphql` + separate resolvers).
