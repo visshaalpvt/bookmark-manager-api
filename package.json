@@ -1,0 +1,31 @@
+{
+  "name": "raphql",
+  "version": "1.0.0",
+  "description": "Bookmark Manager GraphQL API built with Bun, TypeScript, GraphQL Yoga, and Prisma",
+  "main": "src/index.ts",
+  "type": "module",
+  "scripts": {
+    "dev": "bun --watch src/index.ts",
+    "build": "tsc",
+    "start": "bun src/index.ts",
+    "gendb": "prisma generate && prisma migrate dev",
+    "test": "bun test",
+    "test:unit": "bun test tests/unit",
+    "test:integration": "bun test tests/integration",
+    "lint": "tsc --noEmit",
+    "sanity": "tsc --noEmit && bun test"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.22.0",
+    "dotenv": "^16.4.5",
+    "graphql": "^16.9.0",
+    "graphql-yoga": "^5.7.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.5",
+    "bun-types": "^1.1.29",
+    "prisma": "^5.22.0",
+    "typescript": "^5.6.3"
+  }
+}
