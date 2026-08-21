@@ -2,39 +2,32 @@ import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
 import { PrismaClient } from '@prisma/client';
 import { createYogaServer } from '../../src/server';
 
+interface GraphQLResponse {
+  data?: Record<string, unknown>;
+  errors?: Array<{ message: string; extensions?: { code?: string } }>;
+}
+
 describe('API Integration Tests (PostgreSQL)', () => {
   let prisma: PrismaClient;
   let yoga: ReturnType<typeof createYogaServer>;
-  let isDbAvailable = false;
 
   beforeAll(async () => {
     prisma = new PrismaClient();
-    try {
-      // Test connectivity to the database
-      await prisma.$connect();
-      // Clean up previous test data if any
-      await prisma.bookmark.deleteMany({});
-      await prisma.folder.deleteMany({});
-      isDbAvailable = true;
-    } catch {
-      console.warn(
-        '⚠️ PostgreSQL database is not reachable. Skipping integration tests. (Run `docker compose up -d` to start database)'
-      );
-      isDbAvailable = false;
-    }
-
+    // Connect to the real database — fail hard if unreachable
+    await prisma.$connect();
+    // Clean up previous test data
+    await prisma.bookmark.deleteMany({});
+    await prisma.folder.deleteMany({});
     yoga = createYogaServer({ prisma });
   });
 
   afterAll(async () => {
-    if (isDbAvailable) {
-      await prisma.bookmark.deleteMany({});
-      await prisma.folder.deleteMany({});
-      await prisma.$disconnect();
-    }
+    await prisma.bookmark.deleteMany({});
+    await prisma.folder.deleteMany({});
+    await prisma.$disconnect();
   });
 
-  async function executeGraphQL(query: string, variables?: Record<string, unknown>) {
+  async function executeGraphQL(query: string, variables?: Record<string, unknown>): Promise<GraphQLResponse> {
     const response = await yoga.fetch('http://localhost:4000/graphql', {
       method: 'POST',
       headers: {
@@ -46,18 +39,10 @@ describe('API Integration Tests (PostgreSQL)', () => {
       }),
     });
 
-    return (await response.json()) as {
-      data?: Record<string, any>;
-      errors?: Array<{ message: string; extensions?: { code?: string } }>;
-    };
+    return (await response.json()) as GraphQLResponse;
   }
 
   it('should execute full end-to-end folder and bookmark lifecycle', async () => {
-    if (!isDbAvailable) {
-      console.log('Skipping E2E test as Postgres is not currently running');
-      return;
-    }
-
     // 1. Create Folders
     const createFolderMutation = `
       mutation CreateFolder($name: String!) {
@@ -71,13 +56,15 @@ describe('API Integration Tests (PostgreSQL)', () => {
 
     const folderRes1 = await executeGraphQL(createFolderMutation, { name: 'Work' });
     expect(folderRes1.errors).toBeUndefined();
-    const folder1 = folderRes1.data?.createFolder;
-    expect(folder1.id).toBeDefined();
-    expect(folder1.name).toBe('Work');
+    const folder1 = folderRes1.data?.createFolder as Record<string, string> | undefined;
+    expect(folder1).toBeDefined();
+    expect(folder1!.id).toBeDefined();
+    expect(folder1!.name).toBe('Work');
 
     const folderRes2 = await executeGraphQL(createFolderMutation, { name: 'Personal' });
-    const folder2 = folderRes2.data?.createFolder;
-    expect(folder2.id).toBeDefined();
+    const folder2 = folderRes2.data?.createFolder as Record<string, string> | undefined;
+    expect(folder2).toBeDefined();
+    expect(folder2!.id).toBeDefined();
 
     // 2. Query Folders
     const foldersQuery = `
@@ -92,7 +79,8 @@ describe('API Integration Tests (PostgreSQL)', () => {
       }
     `;
     const listFoldersRes = await executeGraphQL(foldersQuery);
-    expect(listFoldersRes.data?.folders.length).toBe(2);
+    const folders = listFoldersRes.data?.folders as unknown[];
+    expect(folders.length).toBe(2);
 
     // 3. Create Bookmarks inside Folder 1
     const createBookmarkMutation = `
@@ -116,23 +104,23 @@ describe('API Integration Tests (PostgreSQL)', () => {
       title: 'Bun Runtime',
       url: 'https://bun.sh',
       tags: ['bun', 'javascript'],
-      folderId: folder1.id,
+      folderId: folder1!.id,
     });
     expect(bm1Res.errors).toBeUndefined();
-    const bm1 = bm1Res.data?.createBookmark;
-    expect(bm1.title).toBe('Bun Runtime');
-    expect(bm1.folder.name).toBe('Work');
+    const bm1 = bm1Res.data?.createBookmark as Record<string, unknown> | undefined;
+    expect(bm1).toBeDefined();
+    expect(bm1!.title).toBe('Bun Runtime');
+    expect((bm1!.folder as Record<string, string>).name).toBe('Work');
 
     // Create 4 more bookmarks for pagination testing
-    const createdBookmarks = [bm1];
     for (let i = 2; i <= 5; i++) {
       const res = await executeGraphQL(createBookmarkMutation, {
         title: `Bookmark Article ${i}`,
         url: `https://example.com/article-${i}`,
         tags: [`tag-${i}`],
-        folderId: folder1.id,
+        folderId: folder1!.id,
       });
-      createdBookmarks.push(res.data?.createBookmark);
+      expect(res.errors).toBeUndefined();
     }
 
     // 4. Test Cursor Pagination (Page 1)
@@ -156,40 +144,40 @@ describe('API Integration Tests (PostgreSQL)', () => {
     `;
 
     const page1Res = await executeGraphQL(paginationQuery, {
-      folderId: folder1.id,
+      folderId: folder1!.id,
       take: 2,
     });
 
-    const page1 = page1Res.data?.bookmarks;
+    const page1 = page1Res.data?.bookmarks as { edges: Array<{ node: { id: string; title: string }; cursor: string }>; pageInfo: { endCursor: string | null; hasNextPage: boolean } };
     expect(page1.edges.length).toBe(2);
     expect(page1.pageInfo.hasNextPage).toBe(true);
     expect(page1.pageInfo.endCursor).toBeDefined();
 
     // 5. Test Cursor Pagination (Page 2 using endCursor)
     const page2Res = await executeGraphQL(paginationQuery, {
-      folderId: folder1.id,
+      folderId: folder1!.id,
       take: 2,
       cursor: page1.pageInfo.endCursor,
     });
 
-    const page2 = page2Res.data?.bookmarks;
+    const page2 = page2Res.data?.bookmarks as typeof page1;
     expect(page2.edges.length).toBe(2);
     expect(page2.pageInfo.hasNextPage).toBe(true);
     // Ensure records on Page 2 are distinct from Page 1
-    const page1Ids = page1.edges.map((e: { node: { id: string } }) => e.node.id);
-    const page2Ids = page2.edges.map((e: { node: { id: string } }) => e.node.id);
+    const page1Ids = page1.edges.map((e) => e.node.id);
+    const page2Ids = page2.edges.map((e) => e.node.id);
     for (const id of page2Ids) {
       expect(page1Ids).not.toContain(id);
     }
 
     // 6. Test Cursor Pagination (Page 3 final page)
     const page3Res = await executeGraphQL(paginationQuery, {
-      folderId: folder1.id,
+      folderId: folder1!.id,
       take: 2,
       cursor: page2.pageInfo.endCursor,
     });
 
-    const page3 = page3Res.data?.bookmarks;
+    const page3 = page3Res.data?.bookmarks as typeof page1;
     expect(page3.edges.length).toBe(1);
     expect(page3.pageInfo.hasNextPage).toBe(false);
 
@@ -197,8 +185,9 @@ describe('API Integration Tests (PostgreSQL)', () => {
     const searchRes = await executeGraphQL(paginationQuery, {
       search: 'bun',
     });
-    expect(searchRes.data?.bookmarks.edges.length).toBe(1);
-    expect(searchRes.data?.bookmarks.edges[0].node.title).toBe('Bun Runtime');
+    const searchResults = searchRes.data?.bookmarks as typeof page1;
+    expect(searchResults.edges.length).toBe(1);
+    expect(searchResults.edges[0]!.node.title).toBe('Bun Runtime');
 
     // 8. Test Update Bookmark
     const updateMutation = `
@@ -211,10 +200,11 @@ describe('API Integration Tests (PostgreSQL)', () => {
       }
     `;
     const updateRes = await executeGraphQL(updateMutation, {
-      id: bm1.id,
+      id: bm1!.id as string,
       title: 'Bun Fast JavaScript Runtime',
     });
-    expect(updateRes.data?.updateBookmark.title).toBe('Bun Fast JavaScript Runtime');
+    const updated = updateRes.data?.updateBookmark as Record<string, string>;
+    expect(updated.title).toBe('Bun Fast JavaScript Runtime');
 
     // 9. Test Move Bookmark to Folder 2
     const moveMutation = `
@@ -230,11 +220,12 @@ describe('API Integration Tests (PostgreSQL)', () => {
       }
     `;
     const moveRes = await executeGraphQL(moveMutation, {
-      id: bm1.id,
-      folderId: folder2.id,
+      id: bm1!.id as string,
+      folderId: folder2!.id,
     });
-    expect(moveRes.data?.moveBookmark.folderId).toBe(folder2.id);
-    expect(moveRes.data?.moveBookmark.folder.name).toBe('Personal');
+    const moved = moveRes.data?.moveBookmark as Record<string, unknown>;
+    expect(moved.folderId).toBe(folder2!.id);
+    expect((moved.folder as Record<string, string>).name).toBe('Personal');
 
     // 10. Test Nested Folder Query
     const singleFolderQuery = `
@@ -249,15 +240,16 @@ describe('API Integration Tests (PostgreSQL)', () => {
         }
       }
     `;
-    const folder2Res = await executeGraphQL(singleFolderQuery, { id: folder2.id });
-    expect(folder2Res.data?.folder.bookmarks.length).toBe(1);
-    expect(folder2Res.data?.folder.bookmarks[0].id).toBe(bm1.id);
+    const folder2Res = await executeGraphQL(singleFolderQuery, { id: folder2!.id });
+    const fetchedFolder = folder2Res.data?.folder as { bookmarks: Array<{ id: string }> };
+    expect(fetchedFolder.bookmarks.length).toBe(1);
+    expect(fetchedFolder.bookmarks[0]!.id).toBe(bm1!.id);
 
     // 11. Test Error Handling: Invalid Input
     const invalidCreateRes = await executeGraphQL(createBookmarkMutation, {
       title: '   ',
       url: 'invalid-url',
-      folderId: folder1.id,
+      folderId: folder1!.id,
     });
     expect(invalidCreateRes.errors).toBeDefined();
     expect(invalidCreateRes.errors?.[0]?.extensions?.code).toBe('BAD_USER_INPUT');
@@ -277,11 +269,11 @@ describe('API Integration Tests (PostgreSQL)', () => {
         deleteBookmark(id: $id)
       }
     `;
-    const deleteRes = await executeGraphQL(deleteMutation, { id: bm1.id });
+    const deleteRes = await executeGraphQL(deleteMutation, { id: bm1!.id as string });
     expect(deleteRes.data?.deleteBookmark).toBe(true);
 
     // Verify deleted bookmark cannot be deleted again
-    const deleteAgainRes = await executeGraphQL(deleteMutation, { id: bm1.id });
+    const deleteAgainRes = await executeGraphQL(deleteMutation, { id: bm1!.id as string });
     expect(deleteAgainRes.errors?.[0]?.extensions?.code).toBe('NOT_FOUND');
   });
 });
