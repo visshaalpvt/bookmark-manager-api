@@ -33,6 +33,9 @@ A high-performance, strictly-typed GraphQL API for organizing, searching, and ma
 Clone the repository and run the application end-to-end:
 
 ```bash
+# 0. Copy environment variables
+cp .env.example .env
+
 # 1. Start the PostgreSQL container
 docker compose up -d
 
